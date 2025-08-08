@@ -118,13 +118,13 @@ def exit_routine():
     compiler.globalBitmap = set() # resetting bitmap for edge optimization
     if not args.target_func:
         if len(compiler.successfulSequences):
-            final_sequences = compiler.successfulSequences + compiler.currIterSuccesses
+            final_sequences = compiler.successfulSequences + compiler.currIterSuccesses + compiler.routineSequences
         else:
             final_sequences = compiler.routineSequences + compiler.currIterSuccesses
     else:
         final_sequences = compiler.targetSequences + compiler.currIterSuccesses
 
-    bestSequences = getBestHarnesses(compiler, final_sequences, float("inf"))
+    bestSequences = getBestHarnesses(compiler, final_sequences, float("inf"), final_corp=True)
 
     if not os.path.exists(f"{output_dir}/final-harnesses/"):
         os.mkdir(f"{output_dir}/final-harnesses/")
@@ -164,7 +164,7 @@ def exit_routine():
     if os.path.exists(f"{input_dir}/seeds_invalidcp"):
         shutil.rmtree(f"{input_dir}/seeds_invalidcp")
 
-def getBestHarnesses(compiler, heap, limit):
+def getBestHarnesses(compiler, heap, limit, final_corp=False):
     harnessesToGenerate = []
     currBitmap = compiler.globalBitmap.copy()
     count = 0
@@ -172,12 +172,27 @@ def getBestHarnesses(compiler, heap, limit):
     while count < min(totalHeap, limit):
         diff_dict = {} # dict that maps diff/coverage gain to list of sequences
         for sequence in heap:
+            if sequence.uninteresting_setup:
+                if final_corp:
+                    continue # ignore non input-dependent harnesses in final set
+                else:
+                    diff_dict.setdefault(1, []).append(sequence)
+                    continue # group all sequences with non-unique behavior together
             currDiff = len(sequence.bitmap.difference(currBitmap))
             diff_dict.setdefault(currDiff, []).append(sequence)
+        if not len(diff_dict.keys()):
+            print("WARNING: No harnesses with input-dependent coverage found")
+            return heap
         max_diff = max(diff_dict.keys())
         if max_diff > 0:
             strongest_sequences = diff_dict[max_diff]
             if len(strongest_sequences) == totalHeap: # no sequences fully stand out, so just return a subset of them rather than just one
+                for seq in strongest_sequences: # prioritize harnesses that use size arguments
+                    if seq.uses_size_arg:
+                        seq.effectiveness = max_diff
+                        harnessesToGenerate.append(seq)
+                if len(harnessesToGenerate):
+                    return harnessesToGenerate
                 for seq in random.sample(strongest_sequences, min(totalHeap, 5)):
                     seq.effectiveness = max_diff
                     harnessesToGenerate.append(seq)
@@ -249,7 +264,7 @@ def process_config_file(filename):
         check_blacklist = loaded_config.get("blacklist")
         blacklist = check_blacklist if check_blacklist and len(check_blacklist) else set()
 
-        preamble_func = loaded_config.get("preamble_func") if "preamble_func" in loaded_config else ""
+        preamble_seq = loaded_config.get("preamble_seq") if "preamble_seq" in loaded_config else []
 
         check_arg_keys = loaded_config.get("arg_keys")
         arg_keys = check_arg_keys if check_arg_keys and len(check_arg_keys) else {}
@@ -260,7 +275,7 @@ def process_config_file(filename):
             print("WARNING: Reading of config file failed")
         return set(), "", {}, ""
 
-    return set(blacklist), preamble_func, arg_keys, add_define_to_harness
+    return set(blacklist), preamble_seq, arg_keys, add_define_to_harness
 
 
 def begin_harnessing_target(argBuilder, functions, compiler, init_sequences, target_function_name):
@@ -270,6 +285,13 @@ def begin_harnessing_target(argBuilder, functions, compiler, init_sequences, tar
     target_function = functions.getFunction(target_function_name)
     if target_function:
         potential_setup = len(target_function.fuzz_args) > 0
+    if len(preamble_seq) != 0:
+        preamble_harnesses = call_preamble_sequence(preamble_seq)
+        if not len(preamble_harnesses):
+            print("WARNING: Preamble sequence had no successful invocations")
+        else:
+            print(f"Preamble sequence had {len(preamble_harnesses)} successful invocation(s)")
+            init_sequences = preamble_harnesses
 
     # if targeted function is not a potential setup routine, then just move on
     if not potential_setup:
@@ -280,6 +302,7 @@ def begin_harnessing_target(argBuilder, functions, compiler, init_sequences, tar
     if preamble_func != "": # calling any preamble functions
         preamble_harnesses = call_preamble(preamble_func)
         if not len(preamble_harnesses):
+            pass
             print("WARNING: Preamble function call had no successful invocations")
         else:
             print(f"Preamble function call had {len(preamble_harnesses)} successful invocation(s)")
@@ -328,9 +351,16 @@ def begin_harnessing_target(argBuilder, functions, compiler, init_sequences, tar
     print("Beginning to explore other setup routines")
     begin_harnessing(argBuilder, functions, compiler, init_sequences)
 
-def call_preamble(preamble_function):
+def call_preamble_sequence(preamble_sequences):
+    current_sequences = [engine.Sequence()]
+    for func in preamble_sequences:
+        current_sequences = call_preamble(func, current_sequences)
+    return current_sequences
+
+def call_preamble(preamble_func, sequences):
     preamble_harnesses = []
-    for seq in init_sequences:
+    print(f"calling preamble for {preamble_func}")
+    for seq in sequences:
         argBuilder.auxiliary_functions = {}
         currSequences = argBuilder.buildInitFunction(deepcopy(seq), preamble_func, set())
         for s in currSequences:
@@ -342,12 +372,12 @@ def begin_harnessing(argBuilder, functions, compiler, init_sequences):
     argBuilder.current_setup_restrictions = 1
     routine_sequences = []
     uninteresting_setup_routines = []
-    if preamble_func != "":
-        preamble_harnesses = call_preamble(preamble_func)
+    if len(preamble_seq) != 0:
+        preamble_harnesses = call_preamble_sequence(preamble_seq)
         if not len(preamble_harnesses):
-            print("WARNING: Preamble function call had no successful invocations")
+            print("WARNING: Preamble sequence had no successful invocations")
         else:
-            print(f"Preamble function call had {len(preamble_harnesses)} successful invocation(s)")
+            print(f"Preamble sequence had {len(preamble_harnesses)} successful invocation(s)")
             init_sequences = preamble_harnesses
 
     for seq in init_sequences:
@@ -355,7 +385,7 @@ def begin_harnessing(argBuilder, functions, compiler, init_sequences):
         if len(routine_sequences) and args.fast_mode:
             break
         for func in functions.setupFunctions:
-            if func == preamble_func:
+            if func in preamble_seq:
                 continue
             currSequences = argBuilder.buildSetupFunction(deepcopy(seq), func, set())
             for s in currSequences:
@@ -446,7 +476,7 @@ if __name__ == "__main__":
     parser.add_argument("--numfuncs", "-n", type=int, required=True, help="Maximum functions to call per harness following \"data entrypoint\" routines.")
     parser.add_argument("--mxdb", "-m", type=str, required=True, help="Path to Multiplier's generated .db database file.")
     parser.add_argument("--headers", "-h", nargs='+', action='append', required=True, help="Library headers to target, to be injected via #include in each harness.")
-    parser.add_argument("--readhow", "-r", type=str, required=True, help="buf(b): Via buffer (e.g., foo(char* buffer)).\nfile (p): Via file name/path (e.g., bar(char* filename)).")
+    parser.add_argument("--readhow", "-r", type=str, required=True, help="buf(b): Via buffer (e.g., foo(char* buffer)).\nfile (p): Via file name/path (e.g., bar(char* filename))\nfile pointer(fp): Via FILE* type.")
     parser.add_argument("--config", "-c", type=str, help="Path to optional config.yaml")
     parser.add_argument("--debug", "-d", action='store_true', help="Report the following information from the harnessing campaign:\n\tFailed harnesses and why they failed.\
                         \n\tSuccessfully-generated harnesses.\n\tInferred function-to-function dependencies.\n\tMultiplier-found declarations, typedef aliases, function pointers, enums, and macros.\
@@ -485,7 +515,7 @@ if __name__ == "__main__":
     allow_lincov = args.allow_lincov
     allow_complex_aux_sequences = args.allow_deepaux 
         
-    blacklist, preamble_func, arg_keys, add_define_to_harness = process_config_file(args.config)
+    blacklist, preamble_seq, arg_keys, add_define_to_harness = process_config_file(args.config)
     
     try:
         input_dir = os.path.abspath(args.input)
@@ -523,6 +553,10 @@ if __name__ == "__main__":
 
     compatibility.checkrets(functions.getAllFunctions())
 
+    # s = dict()
+    # s["avformat_open_input"] = functions.setupFunctions["avformat_open_input"]
+    # functions.setupFunctions = s
+
     dependencies = engine.BuildDependencies(functions, compatibility)
     dependencies.buildDependencies()
 
@@ -535,7 +569,6 @@ if __name__ == "__main__":
         dump_dependencies(functions)
         if track_params:
             dump_potential_args(functions)
-
     print("Finished building dependencies")
 
     shutil.copytree(f"{input_dir}/seeds_valid", f"{input_dir}/seeds_validcp", dirs_exist_ok=True)
@@ -547,11 +580,12 @@ if __name__ == "__main__":
                                                  compiler, args.target_func, arg_keys, args.fast_mode, allow_complex_aux_sequences)
 
     init_sequences = [engine.Sequence()]
-    for init_seq in functions.initFunctions():
-        emptySeq = engine.Sequence()
-        currSeq = argBuilder.buildInitFunction(deepcopy(emptySeq), init_seq, set())
-        for s in currSeq:
-            init_sequences.append(s)
+    if not len(preamble_seq):
+        for init_seq in functions.initFunctions():
+            emptySeq = engine.Sequence()
+            currSeq = argBuilder.buildInitFunction(deepcopy(emptySeq), init_seq, set())
+            for s in currSeq:
+                init_sequences.append(s)
 
     print("Finished determining initialization routines, moving onto setup routines")
 

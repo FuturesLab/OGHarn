@@ -1,6 +1,7 @@
 blacklist:
 
-preamble_func: magic_load 
+preamble_seq:   
+  - magic_load 
 
 arg_keys:
   magic_load:

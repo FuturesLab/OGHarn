@@ -6,7 +6,8 @@ blacklist:
 - sqlite3_open16
 - sqlite3_open_v2
 
-preamble_func: sqlite3_open 
+preamble_seq: 
+  - sqlite3_open 
 
 arg_keys:
   sqlite3_open:

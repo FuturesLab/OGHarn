@@ -7,3 +7,4 @@ blacklist:
 - pcap_activate
 - pcap_dump
 - pcap_file
+- pcap_dump_open
