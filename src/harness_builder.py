@@ -53,7 +53,7 @@ class Harness_Builder:
         for arg in currFunction.mult_args:
             if not argindex == priorityArgNum:
                 possibleArgumentList[argindex] += self.checkFunctionValues(sequence.sequenceMembers, arg, argindex in restricted_args)
-                if arg.pointers and argindex not in restricted_args:
+                if (arg.pointers or arg.typedef_pointers)  and argindex not in restricted_args:
                     possibleArgumentList[argindex].append(literal_arg("NULL"))
                 macroList = self.checkMacros(arg)
                 if macroList:
@@ -143,7 +143,7 @@ class Harness_Builder:
         # first attempt to call auxiliary functions 
         final_sequences = self.call_auxiliary_func(possible_aux_function_calls, sequence, currFunction, restricted_indexes, aux_path, depth, explore_further)
 
-        if len(final_sequences) or not explore_further:
+        if len(final_sequences) or not explore_further: 
             return final_sequences
 
         # call other functions that are not auxiliary but are still potentially easy to call
@@ -273,7 +273,7 @@ class Harness_Builder:
 
         argindex = 0
         for arg in currFunction.mult_args:
-            if arg.pointers and argindex not in restricted_args and argindex != pointer_arg_num:
+            if (arg.pointers or arg.typedef_pointers)  and argindex not in restricted_args and argindex != pointer_arg_num:
                 possibleArgumentList[argindex].append(literal_arg("NULL"))
             possibleArgumentList[argindex] += self.checkFunctionValues(sequence.sequenceMembers, arg, argindex in restricted_args)
             macroList = self.checkMacros(arg)
@@ -317,7 +317,7 @@ class Harness_Builder:
         argindex = 0
         for arg in currFunction.mult_args:
             possibleArgumentList[argindex] += self.checkFunctionValues(sequence.sequenceMembers, arg, argindex in restricted_args)
-            if arg.pointers and argindex not in restricted_args:
+            if (arg.pointers or arg.typedef_pointers) and argindex not in restricted_args:
                 possibleArgumentList[argindex].append(literal_arg("NULL"))
             macroList = self.checkMacros(arg)
             if macroList:
@@ -379,8 +379,9 @@ class Harness_Builder:
                             new_def = self.define_new_fuzzing_value(fuzz_arg.type, buf_prop, size_prop, func, sequence, fuzz_arg.argnum)
                             fuzzArguments.append((argindex, new_def))
                 
-            if arg.pointers and not argindex in restricted_args:
+            if (arg.pointers or arg.typedef_pointers) and not argindex in restricted_args:
                 possibleArgumentList[argindex].append(literal_arg("NULL"))
+
             possibleArgumentList[argindex] += self.checkFunctionValues(sequence.sequenceMembers, arg, argindex in restricted_args)
             macroList = self.checkMacros(arg)
             if macroList:
@@ -599,6 +600,8 @@ class Harness_Builder:
                 for arg in latestMem.args:
                     if "fuzzData" in arg.value:
                         fuzzCount += 1
+                    if arg.value == "size":
+                        seq.uses_size_arg = True # prioritize harnesses that use this size argument
                 if fuzzCount > 1:
                     continue
                 if targetedFunc:
