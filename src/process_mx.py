@@ -34,7 +34,7 @@ class Index_Target_Header:
         if not len(file_queue):
             raise ValueError("Indexed library does not contain files - The supplied .db file is likely malformed or incomplete.")
 
-        base_path = "/".join(self.get_file_name(file_queue[0]).split("/")[:-1])
+        base_path = "/".join(self.get_file_name(file_queue[0]).split("/")[:-2])
 
         if self.recurse:
             # recursively pull in #included files,
@@ -45,6 +45,7 @@ class Index_Target_Header:
                     if base_path in referenced_filename and not self.file_contained_in_headers(referenced_filename):
                         file_queue.append(reference.included_file)
                         self.headers.append(referenced_filename)
+
 
     def extractArtifacts(self):
         self.get_enums()
