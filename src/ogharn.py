@@ -299,13 +299,12 @@ def begin_harnessing_target(argBuilder, functions, compiler, init_sequences, tar
         begin_harnessing(argBuilder, functions, compiler, init_sequences)
         return
 
-    if preamble_func != "": # calling any preamble functions
-        preamble_harnesses = call_preamble(preamble_func)
+    if len(preamble_seq) != 0:
+        preamble_harnesses = call_preamble_sequence(preamble_seq)
         if not len(preamble_harnesses):
-            pass
-            print("WARNING: Preamble function call had no successful invocations")
+            print("WARNING: Preamble sequence had no successful invocations")
         else:
-            print(f"Preamble function call had {len(preamble_harnesses)} successful invocation(s)")
+            print(f"Preamble sequence had {len(preamble_harnesses)} successful invocation(s)")
             init_sequences = preamble_harnesses
 
     # looping through the different restriction values
@@ -552,10 +551,6 @@ if __name__ == "__main__":
     compatibility.process_functions(functions, function_list, blacklist)
 
     compatibility.checkrets(functions.getAllFunctions())
-
-    # s = dict()
-    # s["avformat_open_input"] = functions.setupFunctions["avformat_open_input"]
-    # functions.setupFunctions = s
 
     dependencies = engine.BuildDependencies(functions, compatibility)
     dependencies.buildDependencies()
