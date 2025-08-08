@@ -113,6 +113,7 @@ class Sequence:
         self.setupLen = None
         self.uninteresting_setup = False
         self.seedCov = dict()
+        self.uses_size_arg = False
 
     '''Update the dictionary for class function calls'''
 
@@ -631,7 +632,7 @@ class CheckCompatibility:
                         source_pointers, source_const = source.pointers, False
                     else:
                         source_name, source_pointers, source_const = source_val.base_type, source.pointers, source_val.const
-                    if dest_name == source_name:
+                    if dest_name == source_name and len(dest_name) > 1:
                         add_void = "(void" + ("*" * dest_pointers) + ")" if dest_name == "VOID" else "" # casting types to void * if needed
                         if dest_pointers > (source_pointers + refs):
                             # if the destination has more ptrs than the original type passed to the prev function, create a reference to the original type
@@ -714,6 +715,7 @@ class ConvertToC:
     def write_includes(self):
         if self.add_define_to_harness:
             self.file.code.append(C.line(self.add_define_to_harness))
+        
         for x in self.includes:
             self.file.code.append(C.line("#include " + x))
         self.file.code.append(C.blank())
@@ -763,8 +765,9 @@ class ConvertToC:
                 varname = C.variable(name, type)
                 func2statement = varname.__str__() + " = " + func2statement
             self.addArgChecks(body, func.args) # adding pre-check for arguments that dereference a pointer
+            self.addPrefixChecks(body, function, func.args)
             body.append(C.statement(func2statement))
-            self.addChecks(body, function, func.args, name)
+            self.addChecks(body, function, name)
         body.append(C.statement('return 0'))
         self.file.code.append(body)
 
@@ -775,7 +778,21 @@ class ConvertToC:
                 body.append(f"\tif(!{param.value}){{\n\t\tfprintf(stderr, \"err\");\n\t\texit(0);\t}}") # adding a check to make sure dereferenced value is not NULL
             argindex += 1
 
-    def addChecks(self, body, function, args, name):
+    def addPrefixChecks(self, body, function, args):
+        argindex = 0
+        for arg in function.mult_args:
+            if (not arg.const) and arg.pointers > 1:
+                argument_param = args[argindex]
+                if not isinstance(argument_param, predefined_arg):
+                    continue
+                name = args[argindex].value.strip("*").strip("&")
+                if name == "NULL":
+                    continue
+                body.append(f"\tif(!{name}){{\n\t\tfprintf(stderr, \"err\");\n\t\texit(0);\t}}")
+            argindex += 1
+
+
+    def addChecks(self, body, function, name):
         operator, val = function.ret_status_check
         if operator == "no-check":
             return
@@ -788,15 +805,6 @@ class ConvertToC:
             if operator == "<":
                 variable_name = "(int)" + variable_name
             body.append(f"\tif({variable_name} {operator} {val}){{\n\t\tfprintf(stderr, \"err\");\n\t\texit(0);\t}}")
-
-        argindex = 0
-        for arg in function.mult_args:
-            if (not arg.const) and arg.pointers > 1:
-                name = args[argindex].value.strip("*").strip("&")
-                if name == "NULL":
-                    continue
-                body.append(f"\tif(!{name}){{\n\t\tfprintf(stderr, \"err\");\n\t\texit(0);\t}}")
-            argindex += 1
 
     '''Defines the constant variables in the file '''
     def defineConstants(self, body):
@@ -1054,7 +1062,7 @@ class CompileHarness:
             for seed in seeds:
                 try:
                     proc = subprocess.run(f"cd {self.input_dir} && OUT={self.output_dir}/gen SEED={self.input_dir}/seeds_validcp/{seed} make showmap_static",
-                                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True)
+                                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True, timeout=5)
                     subprocess.run(f"cd {os.getcwd()}", text=True, shell=True)
                     shutil.copytree(f"{self.input_dir}/seeds_valid", f"{self.input_dir}/seeds_validcp", dirs_exist_ok=True)
                     if proc.returncode:
@@ -1066,12 +1074,18 @@ class CompileHarness:
                         return proc.returncode, f"Static Execution: crashed on file: {seed} err - {proc.stdout}\n"
                 except subprocess.CalledProcessError:
                     # catch exception where we terminate OGHarn while a subprocess is running
+                    if proc.returncode:
+                        self.failedCrash += 1
+                        return proc.returncode, f"Static Execution: process called error: {seed} err - {proc.stdout}\n"
                     continue
+                except subprocess.TimeoutExpired as e:
+                    self.failedCrash += 1
+                    return 1, f"Process timed out\n"
             for seed in invalidSeeds:
                 try:
                     proc = subprocess.run(
                         f"cd {self.input_dir} && OUT={self.output_dir}/gen SEED={self.input_dir}/seeds_invalidcp/{seed} make showmap_static",
-                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True)
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True, timeout=5)
                     subprocess.run(f"cd {os.getcwd()}", text=True, shell=True)
                     shutil.copytree(f"{self.input_dir}/seeds_invalid", f"{self.input_dir}/seeds_invalidcp",
                                     dirs_exist_ok=True)
@@ -1085,7 +1099,13 @@ class CompileHarness:
                     continue
                 except subprocess.CalledProcessError:
                     # catch exception where we terminate OGHarn while a subprocess is running
+                    if proc.returncode:
+                        self.failedCrash += 1
+                        return proc.returncode, f"Static Execution: process called error: {seed} err - {proc.stdout}\n"
                     continue
+                except subprocess.TimeoutExpired as e:
+                    self.failedCrash += 1
+                    return 1, f"Process timed out\n"
             return 0, ""
         else:
             return 1, "Static Compilation: " + proc.stderr
@@ -1111,7 +1131,7 @@ class CompileHarness:
             for seed in seeds:
                 try:
                     proc = subprocess.run(f"cd {self.input_dir} && OUT={self.output_dir}/gen SEED={self.input_dir}/seeds_validcp/{seed} make showmap",
-                                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True)
+                                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True, timeout=5)
                     subprocess.run(f"cd {os.getcwd()}", text=True, shell=True)
                     shutil.copytree(f"{self.input_dir}/seeds_valid", f"{self.input_dir}/seeds_validcp", dirs_exist_ok=True)
                     if proc.returncode:
@@ -1150,8 +1170,14 @@ class CompileHarness:
                     shutil.copytree(f"{self.input_dir}/seeds_valid", f"{self.input_dir}/seeds_validcp", dirs_exist_ok=True)
                     continue
                 except subprocess.CalledProcessError:
+                    if proc.returncode:
+                        self.failedCrash += 1
+                        return f"crashed on file: {seed} err - {proc.stdout}\n"
                     # catch exception where we terminate OGHarn while a subprocess is running
                     continue
+                except subprocess.TimeoutExpired as e:
+                    self.failedCrash += 1
+                    return f"Process timed out\n"
             if not unique_cov and sequence.setupLen:
                 self.failedCov += 1
                 return "no unique coverage observed between seeds\n"
@@ -1163,7 +1189,7 @@ class CompileHarness:
                 try:
                     proc = subprocess.run(
                         f"cd {self.input_dir} && OUT={self.output_dir}/gen SEED={self.input_dir}/seeds_invalidcp/{seed} make showmap",
-                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True)
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True, timeout=5)
                     subprocess.run(f"cd {os.getcwd()}", text=True, shell=True)
                     shutil.copytree(f"{self.input_dir}/seeds_invalid", f"{self.input_dir}/seeds_invalidcp",
                                     dirs_exist_ok=True)
@@ -1183,7 +1209,10 @@ class CompileHarness:
                 except subprocess.CalledProcessError:
                     # catch exception where we terminate OGHarn while a subprocess is running
                     continue
-            if uninteresting_cov:
+                except subprocess.TimeoutExpired as e:
+                    self.failedCrash += 1
+                    return f"Process timed out\n"
+            if uninteresting_cov and not "IGNORE_COV" in os.environ:
                 if sequence.setupLen:
                     self.failedCov += 1
                     return "invalid seeds offer no coverage difference\n"
@@ -1241,7 +1270,7 @@ class CompileHarness:
 
     def finalizeRoutineLogs(self, localsequence):
         if localsequence.fuzzDataUsed:
-            self.routineSequences.append(localsequence)
+            #self.routineSequences.append(localsequence)
             self.maxTuplesCaptured = max(self.maxTuplesCaptured, localsequence.effectiveness)
             self.success += 1
             if not self.target_func:
