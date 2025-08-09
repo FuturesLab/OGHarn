@@ -402,7 +402,7 @@ def begin_harnessing(argBuilder, functions, compiler, init_sequences):
             if len(routine_sequences) and args.fast_mode:
                 break
             for func in functions.setupFunctions:
-                if func == preamble_func:
+                if func in preamble_seq:
                     continue
                 currSequences = argBuilder.buildSetupFunction(deepcopy(seq), func, set())
                 for s in currSequences:
