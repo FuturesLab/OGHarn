@@ -651,7 +651,10 @@ class Harness_Builder:
                                 currFunction.mult_args[i], func, curr_sequence, i
                             )
                         )
-                        if currFunction.mult_args[i].pointers == 1:
+                        if (
+                            currFunction.mult_args[i].pointers == 1
+                        ):  # Add some common character buffer arguments, including the fuzzer data.
+                            currArgumentList[i].append(val[1])
                             currArgumentList[i].append(literal_arg('"r"'))
                             currArgumentList[i].append(literal_arg('"w"'))
                             currArgumentList[i].append(literal_arg("fuzzData+size"))
@@ -927,18 +930,14 @@ class Harness_Builder:
                 currFunc, arg, argRelationships, priorityArg, deepcopy(sequence), True
             )
             for seq in sequences:
-                # checking if fuzzData is in multiple argument slots, if it is, ignore it.
+                #
                 latestMem = seq.sequenceMembers[-1]
                 fuzzCount = 0
                 for arg in latestMem.args:
-                    if "fuzzData" in arg.value:
-                        fuzzCount += 1
                     if arg.value == "size":
                         seq.uses_size_arg = (
                             True  # prioritize harnesses that use this size argument
                         )
-                if fuzzCount > 1:
-                    continue
                 if targetedFunc:
                     seq.func_targeted = True
                 latestMem = seq.sequenceMembers[-1]

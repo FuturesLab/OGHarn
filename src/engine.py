@@ -957,7 +957,9 @@ class ConvertToC:
                     buffer_types = ["char*", "uint8_t*", "void*", "Bytef*"]
                     if any(buf in variable[0] for buf in buffer_types):
                         name = variable[2]
-                        decl = f"{variable[0]} {name}[256];\n"
+                        decl = f"{variable[0]} {name}[256];\n"  # If reading from filename, set a buffer size of 256
+                        if self.read_from_buffer:
+                            decl = f"{variable[0]} {name}[size+1];\n"  # If reading from buffer, set the size to size of read-in buffer
                         mem = f"\tsprintf({name}, \"/tmp/{str(''.join(random.choices(string.ascii_lowercase + string.digits, k=5)))}\");"
                         varInitialization = decl + mem
                     elif variable[0] not in self.type_to_val:

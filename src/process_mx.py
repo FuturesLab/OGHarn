@@ -37,7 +37,10 @@ class Index_Target_Header:
                 "Indexed library does not contain files - The supplied .db file is likely malformed or incomplete."
             )
 
-        base_path = "/".join(self.get_file_name(file_queue[0]).split("/")[:-2])
+        base_paths = [
+            "/".join(self.get_file_name(header_path).split("/")[:-2])
+            for header_path in file_queue
+        ]
 
         if self.recurse:
             # recursively pull in #included files,
@@ -45,9 +48,10 @@ class Index_Target_Header:
                 file = file_queue.pop(0)
                 for reference in mx.frontend.IncludeLikeMacroDirective.IN(file):
                     referenced_filename = self.get_file_name(reference.included_file)
-                    if (
+                    if any(
                         base_path in referenced_filename
                         and not self.file_contained_in_headers(referenced_filename)
+                        for base_path in base_paths
                     ):
                         file_queue.append(reference.included_file)
                         self.headers.append(referenced_filename)
