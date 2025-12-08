@@ -1,3 +1,5 @@
+#!/bin/bash
+
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 # Get clang-18
@@ -19,15 +21,21 @@ sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 6AF7F09730B3F0A4
 sudo add-apt-repository ppa:deadsnakes/ppa
 
 # Installing dependencies
-sudo apt update
-sudo apt install build-essential ninja-build cmake graphviz xdot
-sudo apt-get install clang-18
-sudo apt install python3.12-dev python3.12-venv
-sudo apt install kitware-archive-keyring
-sudo apt install bear
-sudo apt install cmake
-sudo apt install lld llvm
-sudo apt install libzstd-dev
+apt-get update && apt-get install -y \
+    build-essential \
+    ninja-build \
+    cmake \
+    graphviz \
+    xdot \
+    clang-18 \
+    python3.12-dev \
+    python3.12-venv \
+    kitware-archive-keyring \
+    bear \
+    lld \
+    llvm \
+    libzstd-dev
+
 
 # Build Multiplier directories
 WORKSPACE_DIR="${SCRIPT_DIR}/multiplier"
