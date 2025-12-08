@@ -1,6 +1,7 @@
 import multiplier as mx
 import engine
 
+
 class Index_Target_Header:
     def __init__(self, db_path, headers, recurse):
         self.index = mx.Index.in_memory_cache(mx.Index.from_database(db_path))
@@ -32,9 +33,14 @@ class Index_Target_Header:
 
         # get the directory the header files are stored in
         if not len(file_queue):
-            raise ValueError("Indexed library does not contain files - The supplied .db file is likely malformed or incomplete.")
+            raise ValueError(
+                "Indexed library does not contain files - The supplied .db file is likely malformed or incomplete."
+            )
 
-        base_path = "/".join(self.get_file_name(file_queue[0]).split("/")[:-1])
+        base_paths = [
+            "/".join(self.get_file_name(header_path).split("/")[:-2])
+            for header_path in file_queue
+        ]
 
         if self.recurse:
             # recursively pull in #included files,
@@ -42,7 +48,11 @@ class Index_Target_Header:
                 file = file_queue.pop(0)
                 for reference in mx.frontend.IncludeLikeMacroDirective.IN(file):
                     referenced_filename = self.get_file_name(reference.included_file)
-                    if base_path in referenced_filename and not self.file_contained_in_headers(referenced_filename):
+                    if any(
+                        base_path in referenced_filename
+                        and not self.file_contained_in_headers(referenced_filename)
+                        for base_path in base_paths
+                    ):
                         file_queue.append(reference.included_file)
                         self.headers.append(referenced_filename)
 
@@ -73,10 +83,14 @@ class Index_Target_Header:
                 continue
             if isinstance(typeDef.underlying_type, mx.ast.ElaboratedType):
                 if isinstance(typeDef.underlying_type.named_type, mx.ast.EnumType):
-                    self.add_enum(typeDef.underlying_type.named_type.declaration, typeDef.name)
+                    self.add_enum(
+                        typeDef.underlying_type.named_type.declaration, typeDef.name
+                    )
                 continue
-            #function pointers are declared as pointer types and then FunctionProtoType types
-            if isinstance(typeDef.underlying_type, mx.ast.PointerType) and isinstance(typeDef.underlying_type.pointee_type, mx.ast.FunctionProtoType):
+            # function pointers are declared as pointer types and then FunctionProtoType types
+            if isinstance(typeDef.underlying_type, mx.ast.PointerType) and isinstance(
+                typeDef.underlying_type.pointee_type, mx.ast.FunctionProtoType
+            ):
                 self.fps[typeDef.name] = typeDef.underlying_type.pointee_type
             elif typeDef.name in self.typedefs:
                 self.typedefs[typeDef.name].add(typeDef.underlying_type)
@@ -93,7 +107,6 @@ class Index_Target_Header:
                 continue
             self.macros.append(macro.name.data)
 
-
     def get_functions(self):
         func_occurrences = {}
         func_mapping = {}
@@ -108,12 +121,13 @@ class Index_Target_Header:
                     func_name = f"{func.name}overload{func_occurrences[func.name]}"
                     func_occurrences[func.name] += 1
                     func_mapping[func.name].append(mult_args)
-                    self.functions.append(engine.Function(func_name, mult_args, mult_ret))
+                    self.functions.append(
+                        engine.Function(func_name, mult_args, mult_ret)
+                    )
             else:
                 func_mapping[func.name] = [mult_args]
                 func_occurrences[func.name] = 1
                 self.functions.append(engine.Function(func_name, mult_args, mult_ret))
-
 
     def add_enum(self, enum, name):
         if not self.contained_in_API_specific_header(enum):

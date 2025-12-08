@@ -56,7 +56,7 @@ harness: # make command used to make the harness during generation
 	$(CC_FUZZ) -o $(OUT)/harness.out $(OUT)/harness.c $(DEPS) $(DEPS_DYN) $(CFLAGS_ASAN)
 
 showmap: # command used to get coverage information about library under test
-	LD_LIBRARY_PATH=$(DEPS_LDD) MAGIC=$(PWD)lib/magic/magic.mgc afl-showmap -o $(OUT)/tempfile -- $(OUT)/harness.out $(SEED)
+	LD_LIBRARY_PATH=$(DEPS_LDD) MAGIC=$(PWD)/lib/magic/magic.mgc afl-showmap -o $(OUT)/tempfile -- $(OUT)/harness.out $(SEED)
 
 harness_fuzz: # compile a harness specifically for fuzzing. Pass the harness number using make harness_fuzz HARNESS_NUMBER=x
 	@ls bin || mkdir bin 
