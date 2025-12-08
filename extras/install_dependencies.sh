@@ -51,7 +51,8 @@ source "${WORKSPACE_DIR}/install/bin/activate"
 
 # Clone Multiplier
 cd "${WORKSPACE_DIR}/src"
-git clone https://github.com/trailofbits/multiplier.git
+git clone https://github.com/trailofbits/multiplier.git &&\
+git checkout 1705339e24058cdb096a9a921d3fc99b52ab9a78
 
 # Build Multiplier
 cmake \
