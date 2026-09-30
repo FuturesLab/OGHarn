@@ -969,11 +969,13 @@ class Harness_Builder:
         call_res = multiplier_type()
         call_res = self.compatibility.init_mult_type(fp.call_result_type, call_res)
         declaration = f"static {self.compatibility.resolve_type(call_res)} {name}("
-        for param in fp.parameter_types:
+        params = []
+        for i, param in enumerate(fp.parameter_types):
             mult_param = multiplier_type()
             mult_param = self.compatibility.init_mult_type(param, mult_param)
-            declaration += self.compatibility.resolve_type(mult_param) + ", "
-        declaration = declaration[:-2] + "){\n\texit(0);\n}"
+            params.append(f"{self.compatibility.resolve_type(mult_param)} arg{i}")
+        declaration += ", ".join(params)
+        declaration += "){\n\texit(0);\n}"
         return declaration
 
     def define_new_fuzzing_value(
