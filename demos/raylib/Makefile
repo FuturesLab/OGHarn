@@ -18,10 +18,10 @@ DEPS_LDD = $(PWD)/$(LIB_NAME)/raylib/
 
 #------------------------------------------------------------------------
 lib: # build for harness generation. Dynamic linking, asan, and afl instrumentation
-	export AFL_USE_ASAN=1
-	export AFL_USE_UBSAN=1
-	rm -rf $(LIB_NAME)
-	git clone $(LIB_REPO) $(LIB_NAME)
+	export AFL_USE_ASAN=1 && \
+	export AFL_USE_UBSAN=1 && \
+	rm -rf $(LIB_NAME) && \
+	git clone $(LIB_REPO) $(LIB_NAME) && \
 	cd $(LIB_NAME) && \
 	git checkout a17a81f05b62d92af1bff103721d17a180aa84e5 && \
 	cmake . \

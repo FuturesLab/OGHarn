@@ -17,10 +17,10 @@ DEPS_LDD = $(PWD)/$(LIB_NAME)/build/src/lib
 
 #------------------------------------------------------------------------
 lib: # build for harness generation. Dynamic linking, asan, and afl instrumentation
-	export AFL_USE_ASAN=1
-	export AFL_USE_UBSAN=1
-	rm -rf $(LIB_NAME)
-	git clone $(LIB_REPO) $(LIB_NAME)
+	export AFL_USE_ASAN=1 && \
+	export AFL_USE_UBSAN=1 && \
+	rm -rf $(LIB_NAME) && \
+	git clone $(LIB_REPO) $(LIB_NAME) && \
 	cd $(LIB_NAME) && cd build && \
 	git checkout 3a26d0a0d643f5035e1d846e6df9472569a6ef0e &&\
 	cmake .. \

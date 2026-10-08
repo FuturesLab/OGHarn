@@ -18,10 +18,10 @@ DEPS_LDD = $(PWD)/$(LIB_NAME)/bin/gcc
 
 #------------------------------------------------------------------------
 lib: # build for harness generation. Dynamic linking, asan, and afl instrumentation -- cp statement at bottom since config file isn't happy
-	export AFL_USE_ASAN=1
-	export AFL_USE_UBSAN=1
-	rm -rf $(LIB_NAME)
-	git clone $(LIB_REPO) $(LIB_NAME)
+	export AFL_USE_ASAN=1 && \
+	export AFL_USE_UBSAN=1 && \
+	rm -rf $(LIB_NAME) && \
+	git clone $(LIB_REPO) $(LIB_NAME) && \
 	cd $(LIB_NAME) && \
 	git checkout 5d70253ac94e5840be7b86054131dd753af63cc7 && \
 	patch -u include/gpac/internal/isomedia_dev.h \
